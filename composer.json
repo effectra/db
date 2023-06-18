@@ -1,0 +1,22 @@
+{
+    "name": "effectra/db",
+    "description": "The Effectra Database package.",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Effectra\\Database\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Mohammed Taha",
+            "email": "info@mohammedtaha.net"
+        }
+    ],
+    "require": {
+        "effectra/config":"^1.0",
+        "effectra/sql-query":"^1.0"
+    },
+    "minimum-stability": "dev"
+}

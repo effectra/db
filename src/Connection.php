@@ -6,6 +6,8 @@ namespace Effectra\Database;
 
 use Effectra\Config\ConfigDB;
 use Effectra\Database\Contracts\DriverInterface;
+use Effectra\Database\DatabaseType\MySql;
+use Effectra\Database\DatabaseType\Sqlite;
 use Effectra\Database\Exception\DatabaseDriverException;
 use Effectra\Database\Exception\DatabaseException;
 use PDO;

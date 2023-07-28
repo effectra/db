@@ -7,7 +7,7 @@ Effectra\Database is a PHP package that provides database connection and query e
 You can install the Effectra\Database package via Composer. Simply run the following command:
 
 ```bash
-composer require effectra/database
+composer require effectra/db
 ```
 
 ## Usage
@@ -18,17 +18,25 @@ To establish a database connection, you need to create an instance of the `Conne
 
 ```php
 use Effectra\Database\Connection;
+use Effectra\Database\Diver;
 use Effectra\Config\ConfigDB;
 
 // Create a new instance of the Connection class
 
+$mysqlConfig = [
+    'driver' => 'mysql',
+    'host' => 'localhost',
+    'database' => 'your_database_name',
+    'username' => 'your_mysql_username',
+    'password' => 'your_mysql_password',
+    'charset' => 'utf8mb4',
+    'collation' => 'utf8mb4_unicode_ci',
+    // Add any additional options if needed
+];
+
 $connection = new Connection(
-    driver: $driver,
-    host: $host,
-    port: $port,
-    username: $username,
-    password: $password,
-    database: $database,
+    Driver::MYSQL,
+    $mysqlConfig 
 );
 // Establish the database connection
 $pdo = $connection->connect();

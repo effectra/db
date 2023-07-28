@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Effectra\Database;
 
-use Effectra\Config\ConfigDB;
 use Effectra\Database\Contracts\DriverInterface;
 use Effectra\Database\DatabaseType\MySql;
+use Effectra\Database\DatabaseType\PostgreSQL;
 use Effectra\Database\DatabaseType\Sqlite;
 use Effectra\Database\Exception\DatabaseDriverException;
 use Effectra\Database\Exception\DatabaseException;
@@ -18,8 +18,14 @@ use PDOException;
  *
  * Represents a database connection manager.
  */
-class Connection extends ConfigDB
+class Connection
 {
+
+    public function __construct(
+        protected string $driver,
+        protected array $config
+    ) {
+    }
     /**
      * Establishes a database connection based on the configuration.
      *
@@ -28,10 +34,13 @@ class Connection extends ConfigDB
      */
     public function connect(): PDO
     {
-        $config = $this->getConfig();
+        $driver = $this->getDatabaseDriver();
+        if (!$driver instanceof DriverInterface) {
+            throw new DatabaseDriverException("Error Processing Driver");
+        }
 
         try {
-            return $this->getDatabaseDriver($config['driver'])->setup($config);
+            return $driver->setup($this->config);
         } catch (PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -40,25 +49,15 @@ class Connection extends ConfigDB
     /**
      * Retrieves the appropriate database driver based on the given driver string.
      *
-     * @param string|DriverInterface $driver The driver string or an instance of DriverInterface.
      * @return DriverInterface The instance of the DriverInterface implementation for the specified driver.
      * @throws DatabaseDriverException If the driver is not supported or does not exist.
      */
-    public function getDatabaseDriver(string $driver): DriverInterface
+    public function getDatabaseDriver(): DriverInterface
     {
-        $drivers = [
-            'mysql' => MySql::class,
-            'sqlite' => Sqlite::class,
-        ];
-
-        if (isset($drivers[$driver])) {
-            return new $drivers[$driver]();
-        }
-
-        if ($driver instanceof DriverInterface) {
-            return $driver;
-        }
-
-        throw new DatabaseDriverException("This driver '$driver' does not exist.");
+        return match($this->driver){
+            'mysql'=> new MySql(),
+            'sqlite' => new Sqlite(),
+            'postgresql' =>new PostgreSQL()
+        };
     }
 }

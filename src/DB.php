@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Effectra\Database;
 
+use Effectra\Database\Data\DataOptimizer;
+use Effectra\Database\Data\DataValidator;
+use Effectra\Database\Exception\DatabaseException;
+use Effectra\Database\Exception\DataValidatorException;
+use Effectra\SqlQuery\Operations\Insert;
 use Effectra\SqlQuery\Query;
 use PDO;
 use PDOStatement;
@@ -15,44 +20,91 @@ use PDOStatement;
  */
 class DB
 {
-    protected PDO|null  $conn = null;
-    protected PDOStatement|false $stmt = false;
-    protected string  $q = "";
-    protected string  $table = "";
-    protected array $data = [];
-
-    const FETCH_ASSOC = PDO::FETCH_ASSOC;
+    use TargetTable;
 
     /**
-     * DB constructor.
-     *
-     * @param PDO|null $conn The PDO connection instance.
+     * @var string $QUERY The SQL query string.
      */
-    public function __construct(PDO $conn = null)
-    {
-        if ($conn) {
-            $this->conn = $conn;
-        }
+    protected static string $QUERY = '';
+
+    /**
+     * @var PDOStatement|false $statement The PDO statement or false if no statement is set.
+     */
+    protected PDOStatement|false $statement = false;
+
+    /**
+     * @var array $dataInserted The data inserted during operations.
+     */
+    protected array $dataInserted = [];
+
+    /**
+     * @var string $table The name of the database table.
+     */
+    protected string $table;
+
+    /**
+     * Constructor for DB.
+     *
+     * @param string $driver The database driver.
+     * @param PDO $connection The PDO database connection.
+     */
+    public function __construct(
+        protected string $driver,
+        protected \PDO $connection,
+    ) {
+        Query::driver($this->driver);
     }
 
     /**
-     * Get the PDO connection instance.
+     * Get the PDO database connection.
      *
-     * @return PDO The PDO connection instance.
+     * @return PDO The PDO database connection.
      */
-    public function getConn(): PDO
+    private function getConnection(): PDO
     {
-        return $this->conn;
+        return $this->connection;
     }
 
     /**
-     * Get the current query.
+     * Set the PDO database connection.
      *
-     * @return string The current query.
+     * @param PDO $connection The PDO database connection.
      */
-    public function getQuery(): string
+    private function setConnection(PDO $connection): void
     {
-        return $this->q;
+        $this->connection = $connection;
+    }
+
+    /**
+     * Get the current SQL query string.
+     *
+     * @return string The current SQL query string.
+     */
+    private function getQuery(): string
+    {
+        return static::$QUERY;
+    }
+
+    /**
+     * Set the current SQL query string.
+     *
+     * @param string $query The SQL query string to set.
+     */
+    private function setQuery(string $query): void
+    {
+        static::$QUERY = $query;
+    }
+
+    /**
+     * Set the current SQL query string.
+     *
+     * @param string $query The SQL query string to set.
+     * @return self The DB instance with the specified table.
+     */
+    public function query(string $query): self
+    {
+        $this->setQuery($query);
+        return $this;
     }
 
     /**
@@ -62,240 +114,288 @@ class DB
      */
     public function getStatement(): PDOStatement|false
     {
-        return $this->stmt;
+        return $this->statement;
     }
 
     /**
-     * Set the PDO connection instance.
-     *
-     * @param PDO $conn The PDO connection instance.
+     * Check statement instance
+     * @return bool return true if statement is not false
      */
-    public function setConn(PDO $conn)
+    private function hasStatement(): bool
     {
-        $this->conn = $conn;
+        return $this->statement !== false;
     }
 
     /**
-     * Set the query string.
+     * Set the statement instance.
      *
-     * @param string $query The query string.
-     * @return DB The updated DB instance.
+     * @param  PDOStatement|false $statement The prepared statement instance.
      */
-    public function withQuery($query): self
+    private function setStatement(PDOStatement|false $statement): void
     {
-        $clone = clone $this;
-        $clone->q = (string) $query;
-        return $clone;
+        $this->statement  = $statement;
     }
 
     /**
-     * Set the prepared statement instance.
-     *
-     * @param PDOStatement|false $stmt The prepared statement instance.
-     * @return DB The updated DB instance.
+     * Get table name
+     * @return string the name of table
      */
-    public function withStatement(PDOStatement|false $stmt): self
+    private function getTable(): string
     {
-        $clone = clone $this;
-        $clone->stmt = $stmt;
-        return $clone;
+        return $this->table;
     }
 
     /**
-     * Add to the current query string.
+     * Create table name.
      *
-     * @param string $query The query string to add.
-     * @return string The updated query.
+     * @param string $table The name of the database table.
+     * @return void
      */
-    public function query(string $query = ''): string
+    private function setTable(string $table): void
     {
-        if (!empty($query)) {
-            $this->q .= $query;
+        $this->table = $table;
+    }
+
+    /**
+     * Create and return a new DB instance with the specified table name.
+     *
+     * @param string $table The name of the database table.
+     * @return self The DB instance with the specified table.
+     */
+    public function table(string $table): self
+    {
+        $this->table = $table;
+        return $this;
+    }
+
+    /**
+     * Execute the current SQL query with optional parameters.
+     *
+     * @param array|null $params Optional parameters to bind to the query.
+     * @return bool True if the query was executed successfully, false otherwise.
+     *
+     * @throws \Exception If there's an error executing the query.
+     */
+    public function run(?array $params = null): bool
+    {
+        try {
+            $stmt = $this->getConnection()->prepare(static::$QUERY);
+            $this->setStatement($stmt);
+            return $this->getStatement()->execute($params);
+        } catch (\PDOException $e) {
+            throw new \Exception($e->getMessage());
         }
-        return $this->getQuery();
     }
 
     /**
-     * Run the query with optional parameters.
+     * Fetch all rows from the executed query as an associative array.
      *
-     * @param array|null $params The query parameters.
-     * @return bool True if the query executed successfully, false otherwise.
+     * @return array|null An array of fetched data or null if no data is available.
      */
-    public function run(array|null $params = null): bool
-    {
-        $query = (string) $this->q;
-        $this->stmt = $this->conn->prepare($query);
-        return $this->stmt->execute($params);
-    }
-
-    /**
-     * Execute the query and fetch all rows as an associative array.
-     *
-     * @param array|null $params The query parameters.
-     * @return array The fetched data.
-     */
-    public function get(?array $params = null): array
-    {
-        $this->run($params);
-        $this->stmt->setFetchMode(PDO::FETCH_ASSOC);
-        $data = $this->stmt->fetchAll();
-
-        return $data;
-    }
-
-    /**
-     * Execute the query and fetch the first row as an object.
-     *
-     * @return mixed The fetched object.
-     */
-    public function getAsObject()
+    public function fetch(): array|null
     {
         $this->run();
-        $this->stmt->setFetchMode(PDO::FETCH_OBJ);
-        $data = $this->stmt->fetchAll();
-        return $this->prettyData($data)[0] ?? [];
-    }
-
-    /**
-     * Set the data for binding parameters in the prepared statement.
-     *
-     * @param array $data The data to bind.
-     * @return DB The updated DB instance.
-     */
-    public function data(array $data): self
-    {
-        $this->data = $data;
-        foreach ($data as $key => $value) {
-            if ($this->stmt !== false) {
-                $this->stmt->bindParam(":$key", (string)  $value);
-            }
+        if ($this->hasStatement()) {
+            $this->getStatement()->setFetchMode(PDO::FETCH_ASSOC);
+            $data = $this->getStatement()->fetchAll();
+            $this->setStatement(false);
+            return $data;
         }
-        return $this;
+        return null;
     }
 
     /**
-     * Set the table name for the query.
+     * Fetch all rows from the executed query as an array of objects.
      *
-     * @param string $name The table name.
-     * @return DB The updated DB instance.
+     * @return array|null An array of fetched data as objects or null if no data is available.
      */
-    public function table(string $name): self
+    public function fetchObject(): array|null
     {
-        $this->table = $name;
-        return $this;
+        $this->run();
+        if ($this->hasStatement()) {
+            $data = $this->getStatement()->fetchAll();
+            $this->setStatement(false);
+            return $data;
+        }
+        return null;
     }
 
     /**
-     * Insert data into the table.
+     * Get the data inserted during an insert operation.
      *
-     * @param mixed $data The data to insert.
-     * @return void
+     * @return array The data inserted.
      */
-    public function insert($data): void
+    public function getDataInserted(): array
     {
-        if ($this->isCollection($data)) {
-            $query = "";
-            foreach ($data as $item) {
-                if (is_array($item)) {
-                    $query .= Query::insert($this->table)->columns(array_keys($item))->values(array_values($item));
+        return $this->dataInserted;
+    }
+
+    /**
+     * Set the data inserted during an insert operation.
+     *
+     * @param array $dataInserted The data inserted.
+     */
+    public function setDataInserted(array $dataInserted): void
+    {
+        $this->dataInserted = $dataInserted;
+    }
+
+    /**
+     * Validate and set data to be inserted into the database.
+     *
+     * @param mixed $data The data to be inserted.
+     *
+     * @throws DataValidatorException If the data is not valid.
+     */
+    public function data($data)
+    {
+        $validate = new DataValidator($data);
+
+        if ($validate->isAssoc()) {
+            $this->setDataInserted([$data]);
+            return;
+        }
+
+        if ($validate->isArrayOfAssoc()) {
+            $this->setDataInserted($data);
+            return;
+        }
+
+        $validate->validate();
+    }
+
+    /**
+     * Validate the payload against table columns and apply data transformation rules.
+     *
+     * @param array $payload The payload data to validate.
+     * @param array $tableInfo The information about the database table columns.
+     *
+     * @return array The validated and transformed payload data.
+     *
+     * @throws DataValidatorException If the payload is not valid.
+     */
+    public function validatePayload(array $payload, array $tableInfo): array
+    {
+        $requiredColumns = $this->requiredColumns($tableInfo);
+        $payloadKeys = array_keys($payload);
+
+        $missingColumns = array_diff($requiredColumns, $payloadKeys);
+
+        if (!empty($missingColumns)) {
+            $diff = join(",", $missingColumns);
+            throw new DataValidatorException("Error Processing Data, required columns not found: '$diff'", 1);
+        }
+        foreach ($payload as $col => $value) {
+
+
+            $info = $this->getColumnInfo($col, $tableInfo);
+
+            if ($info) {
+
+                if (gettype($value) !== $info['type']) {
+                    throw new DataValidatorException("Error Processing Data, type given for key '$col' not respect datatype column in database table, type must be an {$info['type']} at '$value (" . gettype($value) . ")'", 1);
+                }
+
+                if (empty($value) && $info['default'] === null && $info['null'] === 'NO') {
+                    throw new DataValidatorException("key $col must has a non-empty value");
                 }
             }
-        } else {
-            $query = Query::insert($this->table)->columns(array_keys($data))->values(array_values($data));
-        }
-        $this->withQuery((string) $query)->run();
-    }
 
-    /**
-     * Update data in the table.
-     *
-     * @param mixed $data The data to update.
-     * @param mixed $conditions The update conditions.
-     * @return void
-     */
-    public function update($data, $conditions = null): void
-    {
-        if ($this->isCollection($data)) {
-            $query = "";
-            foreach ($data as $item) {
-                if (is_array($item)) {
-                    $query = Query::update($this->table)
-                        ->columns(array_keys($item))
-                        ->values(array_values($item))
-                        ->where($conditions);
-                }
-            }
-        } else {
-            $query = Query::update($this->table)
-                ->columns(array_keys($data))
-                ->values(array_values($data))
-                ->where($conditions);
-        }
-        $this->withQuery((string) $query)->run($query->combineColumnsValues());
-    }
+            $payload[$col] = $value;
 
-    /**
-     * Get the columns of the table.
-     *
-     * @return array|false The columns of the table.
-     */
-    public function getColumns(): array|false
-    {
-        $query = Query::describe($this->table);
-        return  $this->withQuery($query)->get();
-    }
-
-    /**
-     * Get the field names of the columns of the table.
-     *
-     * @return array|false The field names of the columns.
-     */
-    public function getColumnsField(): array|false
-    {
-        return array_map(fn ($col) => $col['Field'], $this->getColumns());
-    }
-
-    /**
-     * Check if the data is a collection (multiple rows).
-     *
-     * @param mixed $data The data to check.
-     * @return bool True if the data is a collection, false otherwise.
-     */
-    public function isCollection($data)
-    {
-        return is_array($data) && count($data) > 1;
-    }
-
-    /**
-     * Check if the string is a valid JSON.
-     *
-     * @param string $data The string to check.
-     * @return bool True if the string is valid JSON, false otherwise.
-     */
-    public function isJson(string $data):bool
-    {
-        json_decode($data);
-        return (json_last_error() === JSON_ERROR_NONE);
-    }
-
-    /**
-     * Format the fetched data by decoding JSON strings.
-     *
-     * @param array $data The fetched data.
-     * @return array The formatted data.
-     */
-    public function prettyData($data)
-    {
-        if ($this->isCollection($data)) {
-            foreach ($data as &$item) {
-                foreach ($item as $key => $value) {
-                    $decode = json_decode($value, true);
-                    if ($this->isJson($value)) {
-                        $item[$key] = $decode;
-                    }
-                }
+            if (in_array($col, array_diff($payloadKeys, $requiredColumns))) {
+                unset($payload[$col]);
             }
         }
-        return  $data;
+
+        return $payload;
+    }
+
+    /**
+     * Pass data to the query and insert it into the database table.
+     *
+     * @param array $data The data to insert.
+     * @param Insert|Update $query The insert/update query object.
+     *
+     * @return bool True if the data was successfully inserted, false otherwise.
+     *
+     * @throws DatabaseException If there's an error during data insertion.
+     */
+    public function passData(array $data, $query)
+    {
+        $this->data($data);
+
+        try {
+
+            $this->getConnection()->beginTransaction();
+
+            $tableInfo = $this->getTableInfo();
+
+            foreach ($this->getDataInserted() as $item) {
+
+                $validateItem = $this->validatePayload($item, $tableInfo);
+
+                $query->data($validateItem);
+
+                $query->insertValuesModeSafe();
+
+                $this->query((string) $query);
+
+                $this->run($query->getParams());
+            }
+
+            return $this->getConnection()->commit();
+        } catch (\Throwable $e) {
+
+            if ($this->getConnection()->inTransaction()) {
+                $this->getConnection()->rollBack();
+            }
+
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
+    /**
+     * Insert data into the database table.
+     *
+     * @param array|object $data The data to be inserted.
+     * @return bool True if the data was successfully inserted, false otherwise.
+     */
+    public function insert($data): bool
+    {
+
+        $query =  Query::insert($this->getTable(), Insert::INSERT_DATA);
+
+        return $this->passData($data, $query);
+    }
+
+    /**
+     * Update data in the database table based on specified conditions.
+     *
+     * @param array $data The data to be updated.
+     * @param mixed $conditions The conditions that determine which rows to update.
+     * @return bool True if the data was successfully updated, false otherwise.
+     */
+    public function update(array $data, $conditions): bool
+    {
+
+        $query =  Query::update($this->getTable());
+
+        return $this->passData($data, $query);
+    }
+
+    /**
+     * Fetch and optimize data using custom rules.
+     *
+     * @param callable $rules A callback function to define data optimization rules.
+     * @return array|null The optimized data based on the provided rules.
+     */
+    public function fetchPretty(callable $rules): ?array
+    {
+        $data = $this->fetch();
+        if (is_array($data)) {
+            return (new DataOptimizer($data))->optimize($rules);
+        }
+        return null;
     }
 }

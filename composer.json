@@ -15,7 +15,7 @@
         }
     ],
     "require": {
-        "effectra/sql-query":"^1.0"
+        "effectra/sql-query":"^2.0"
     },
     "minimum-stability": "stable"
 }

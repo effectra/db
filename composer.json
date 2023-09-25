@@ -14,6 +14,7 @@
             "email": "info@mohammedtaha.net"
         }
     ],
+    
     "require": {
         "effectra/sql-query":"^2.0"
     },

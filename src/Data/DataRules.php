@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Effectra\Database\Data;
 
+use Symfony\Component\VarDumper\VarDumper;
+
 /**
  * DataRules class for defining validation rules and attributes for data.
  */
@@ -22,9 +24,9 @@ class DataRules
      * Get the attribute name for a specified key.
      *
      * @param string $attribute The key for which to retrieve the attribute name.
-     * @return string The attribute name.
+     * @return mixed The attribute name.
      */
-    public function getAttribute(string $attribute): string
+    public function getAttribute(string $attribute): mixed
     {
         return $this->attributes[$attribute];
     }
@@ -54,10 +56,10 @@ class DataRules
      * Set an attribute for a specific key.
      *
      * @param string $key The key for which to set the attribute.
-     * @param string $attribute The attribute name to set.
+     * @param  $attribute The attribute name to set.
      * @return self
      */
-    public function setAttribute(string $key, string $attribute): self
+    public function setAttribute(string $key, $attribute): self
     {
         $this->attributes[$key] = $attribute;
         return $this;
@@ -201,5 +203,79 @@ class DataRules
         $this->setAttribute('from_format', $from_format);
         $this->setAttribute('to_format', $to_format);
         return $this->setRule($key, 'date');
+    }
+
+    /**
+     * Set a new value for a rule key.
+     *
+     * @param string $key       The rule key.
+     * @param mixed  $new_value The new value to set.
+     *
+     * @return self Returns the current instance of the class.
+     */
+    public function setValue($key, $new_value): self
+    {
+        $this->setAttribute('replace_new_value', $new_value);
+        return $this->setRule($key, 'replace_value');
+    }
+
+    /**
+     * Replace a value in a rule with a new one.
+     *
+     * @param string $key     The rule key.
+     * @param mixed  $default The default value to replace.
+     * @param mixed  $new     The new value to replace with.
+     *
+     * @return self Returns the current instance of the class.
+     */
+    public function replaceValue($key, $default, $new): self
+    {
+        $this->setAttribute('replace_value_default', $default);
+        $this->setAttribute('replace_value_new', $new);
+        return $this->setRule($key, 'replace_value_by_new');
+    }
+
+    /**
+     * Replace text within a rule with a new value.
+     *
+     * @param string $key        The rule key.
+     * @param string $target     The text to replace.
+     * @param string $new_value  The new value to replace with.
+     *
+     * @return self Returns the current instance of the class.
+     */
+    public function replaceText($key, $target, $new_value): self
+    {
+        $this->setAttribute('replace_text_default', $target);
+        $this->setAttribute('replace_text_new', $new_value);
+        return $this->setRule($key, 'replace_text');
+    }
+
+    /**
+     * Rename a rule key to a new name.
+     *
+     * @param string $key      The current rule key.
+     * @param string $new_name The new name for the key.
+     *
+     * @return self Returns the current instance of the class.
+     */
+    public function renameKey(string $key, string $new_name): self
+    {
+        $this->setAttribute("new_key_name_$key", $new_name);
+        return $this->setRule($key, 'rename');
+    }
+
+    /**
+     * Strip HTML tags from a rule value.
+     *
+     * @param string         $key          The rule key.
+     * @param string[]|string|null $allowed_tags An array of allowed HTML tags or null to strip all tags.
+     *
+     * @return self Returns the current instance of the class.
+     */
+    public function stripTags(string $key, $allowed_tags = null): self
+    {
+        $this->setAttribute('allowed_tags', $allowed_tags);
+        return $this->setRule($key, 'strip_tags');
     }
 }

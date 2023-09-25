@@ -134,6 +134,39 @@ class DataRules
     }
 
     /**
+     * Set a rule for a key to validate as Boolean.
+     *
+     * @param string $key The key to validate as Boolean.
+     * @return self
+     */
+    public function bool(string $key): self
+    {
+        return $this->setRule($key, 'bool');
+    }
+
+    /**
+     * Set a rule for a key to validate as Array.
+     *
+     * @param string $key The key to validate as Array.
+     * @return self
+     */
+    public function array(string $key): self
+    {
+        return $this->setRule($key, 'array');
+    }
+
+    /**
+     * Set a rule for a key to validate as Object.
+     *
+     * @param string $key The key to validate as Object.
+     * @return self
+     */
+    public function object(string $key): self
+    {
+        return $this->setRule($key, 'object');
+    }
+
+    /**
      * Set a rule for a key to validate as an integer.
      *
      * @param string $key The key to validate as an integer.

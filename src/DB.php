@@ -8,6 +8,7 @@ use Effectra\Database\Data\DataOptimizer;
 use Effectra\Database\Data\DataValidator;
 use Effectra\Database\Exception\DatabaseException;
 use Effectra\Database\Exception\DataValidatorException;
+use Effectra\SqlQuery\Condition;
 use Effectra\SqlQuery\Operations\Insert;
 use Effectra\SqlQuery\Query;
 use PDO;
@@ -112,7 +113,17 @@ class DB
      *
      * @return PDOStatement|false The prepared statement instance.
      */
-    public function getStatement(): PDOStatement|false
+    private function getStatement(): PDOStatement|false
+    {
+        return $this->statement;
+    }
+
+    /**
+     * Get the prepared statement instance.
+     *
+     * @return PDOStatement|false The prepared statement instance.
+     */
+    public function statement(): PDOStatement|false
     {
         return $this->statement;
     }
@@ -157,6 +168,17 @@ class DB
     }
 
     /**
+     * Check table name is set.
+     *
+     */
+    private function isSetTableName()
+    {
+        if (!isset($this->table)) {
+            throw new DatabaseException("table name is not set");
+        }
+    }
+
+    /**
      * Create and return a new DB instance with the specified table name.
      *
      * @param string $table The name of the database table.
@@ -166,6 +188,134 @@ class DB
     {
         $this->table = $table;
         return $this;
+    }
+
+    /**
+     * Begin a new database transaction.
+     *
+     * @return bool Returns true on success or false on failure.
+     */
+    public function beginTransaction(): bool
+    {
+        return $this->getConnection()->beginTransaction();
+    }
+
+    /**
+     * Commit the current database transaction.
+     *
+     * @return bool Returns true on success or false on failure.
+     */
+    public function commit(): bool
+    {
+        return $this->getConnection()->commit();
+    }
+
+    /**
+     * Quotes a string for use in a query.
+     *
+     * @param string $string The string to be quoted.
+     * @param int    $type   The data type of the quoted value (e.g., PDO::PARAM_INT, PDO::PARAM_STR).
+     *
+     * @return string|false Returns the quoted string on success or false on failure.
+     */
+    public function quote(string $string, int $type = PDO::PARAM_STR): string|false
+    {
+        return $this->getConnection()->quote($string, $type);
+    }
+
+    /**
+     * Roll back the current database transaction.
+     *
+     * @return bool Returns true on success or false on failure.
+     */
+    public function rollback(): bool
+    {
+        return $this->getConnection()->rollback();
+    }
+
+    /**
+     * Get the ID of the last inserted row.
+     *
+     * @return string|false Returns the last inserted ID or false on failure.
+     */
+    public function lastInsertId(): string|false
+    {
+        return $this->getConnection()->lastInsertId();
+    }
+
+    /**
+     * Check if a transaction is currently active.
+     *
+     * @return bool Returns true if a transaction is active, false otherwise.
+     */
+    public function inTransaction(): bool
+    {
+        return $this->getConnection()->inTransaction();
+    }
+
+    /**
+     * Get the SQLSTATE error code.
+     *
+     * @return string|null Returns the error code or null if no error occurred.
+     */
+    public function errorCode(): ?string
+    {
+        return $this->getConnection()->errorCode();
+    }
+
+    /**
+     * Get extended error information.
+     *
+     * @return array Returns an array of error information.
+     */
+    public function errorInfo(): array
+    {
+        return $this->getConnection()->errorInfo();
+    }
+
+    /**
+     * Execute an SQL statement and return the number of affected rows.
+     *
+     * @param string $statement The SQL statement to execute.
+     *
+     * @return int|false Returns the number of affected rows or false on failure.
+     */
+    public function exec(string $statement): int|false
+    {
+        return $this->getConnection()->exec($statement);
+    }
+
+    /**
+     * Get the value of a PDO attribute.
+     *
+     * @param int $attribute The PDO attribute to retrieve.
+     *
+     * @return mixed Returns the attribute value.
+     */
+    public function getAttribute(int $attribute): mixed
+    {
+        return $this->getConnection()->getAttribute($attribute);
+    }
+
+    /**
+     * Get an array of available PDO drivers.
+     *
+     * @return array Returns an array of available PDO drivers.
+     */
+    public function getAvailableDrivers(): array
+    {
+        return $this->getConnection()->getAvailableDrivers();
+    }
+
+    /**
+     *  Set an attribute 
+     * @param int $attribute
+     * @param mixed $value
+     * @return bool — TRUE on success or FALSE on failure.
+     */
+    public  function setAttribute(int $attribute, mixed $value): bool
+    {
+        return $this->getConnection()->setAttribute($attribute, $value);
     }
 
     /**
@@ -185,6 +335,58 @@ class DB
         } catch (\PDOException $e) {
             throw new \Exception($e->getMessage());
         }
+    }
+
+    /**
+     * Bind a parameter to a variable for a prepared statement.
+     *
+     * @param int|string $param        The parameter identifier or name.
+     * @param mixed      &$var         The reference to the variable to bind.
+     * @param int        $type         The data type of the parameter (e.g., PDO::PARAM_INT, PDO::PARAM_STR).
+     * @param int|null   $maxLength    The length of the data type.
+     * @param mixed      $driverOptions Additional driver-specific options (optional).
+     *
+     * @return self Returns the current instance of the class.
+     */
+    public function bindParam(int|string $param, mixed &$var, int $type = PDO::PARAM_STR, int $maxLength = null, mixed $driverOptions = null)
+    {
+        $this->getStatement()->bindParam($param, $var, $type, $maxLength, $driverOptions);
+        return $this;
+    }
+
+    /**
+     * Binds multiple parameters to a prepared statement with optional options.
+     *
+     * @param array $params An associative array where keys are parameter names
+     *                      and values are either the values to bind or an associative
+     *                      array of options including 'value', 'type', 'maxLength',
+     *                      and 'driverOptions'.
+     *
+     * @return self Returns the current instance of the class.
+     */
+    public function bindMultipleParams(array $params): self
+    {
+        foreach ($params as $param => $options) {
+            // Set default values for type, maxLength, and driverOptions
+            $type = PDO::PARAM_STR;
+            $maxLength = null;
+            $driverOptions = null;
+
+            // Extract options if provided
+            if (is_array($options)) {
+                $type = $options['type'] ?? $type;
+                $maxLength = $options['maxLength'] ?? $maxLength;
+                $driverOptions = $options['driverOptions'] ?? $driverOptions;
+                $value = $options['value'] ?? null;
+            } else {
+                $value = $options;
+            }
+
+            // Bind the parameter
+            $this->getStatement()->bindParam($param, $value, $type, $maxLength, $driverOptions);
+        }
+
+        return $this;
     }
 
     /**
@@ -216,6 +418,21 @@ class DB
             $data = $this->getStatement()->fetchAll();
             $this->setStatement(false);
             return $data;
+        }
+        return null;
+    }
+
+    /**
+     * Fetch and optimize data using custom rules.
+     *
+     * @param callable $rules A callback function to define data optimization rules.
+     * @return array|null The optimized data based on the provided rules.
+     */
+    public function fetchPretty(callable $rules): ?array
+    {
+        $data = $this->fetch();
+        if (is_array($data)) {
+            return (new DataOptimizer($data))->optimize($rules);
         }
         return null;
     }
@@ -265,6 +482,19 @@ class DB
     }
 
     /**
+     * Optimize data, Validate and set data to be inserted into the database.
+     *
+     * @param mixed $data The data to be inserted.
+     *
+     * @throws DataValidatorException If the data is not valid.
+     */
+    public function prettyData($data, callable $rules)
+    {
+        $data = (new DataOptimizer($data))->optimize($rules);
+        $this->data($data);
+    }
+
+    /**
      * Validate the payload against table columns and apply data transformation rules.
      *
      * @param array $payload The payload data to validate.
@@ -285,6 +515,7 @@ class DB
             $diff = join(",", $missingColumns);
             throw new DataValidatorException("Error Processing Data, required columns not found: '$diff'", 1);
         }
+
         foreach ($payload as $col => $value) {
 
 
@@ -312,18 +543,16 @@ class DB
     }
 
     /**
-     * Pass data to the query and insert it into the database table.
+     * Insert data into the database table.
      *
-     * @param array $data The data to insert.
-     * @param Insert|Update $query The insert/update query object.
-     *
+     * @param array|object $data The data to be inserted.
      * @return bool True if the data was successfully inserted, false otherwise.
-     *
      * @throws DatabaseException If there's an error during data insertion.
      */
-    public function passData(array $data, $query)
+    public function insert($data): bool
     {
         $this->data($data);
+        $this->isSetTableName();
 
         try {
 
@@ -334,6 +563,8 @@ class DB
             foreach ($this->getDataInserted() as $item) {
 
                 $validateItem = $this->validatePayload($item, $tableInfo);
+
+                $query =  Query::insert($this->getTable(), Insert::INSERT_DATA);
 
                 $query->data($validateItem);
 
@@ -356,46 +587,58 @@ class DB
     }
 
     /**
-     * Insert data into the database table.
-     *
-     * @param array|object $data The data to be inserted.
-     * @return bool True if the data was successfully inserted, false otherwise.
-     */
-    public function insert($data): bool
-    {
-
-        $query =  Query::insert($this->getTable(), Insert::INSERT_DATA);
-
-        return $this->passData($data, $query);
-    }
-
-    /**
      * Update data in the database table based on specified conditions.
      *
      * @param array $data The data to be updated.
-     * @param mixed $conditions The conditions that determine which rows to update.
+     * @param ?Condition $conditions The conditions that determine which rows to update.
      * @return bool True if the data was successfully updated, false otherwise.
      */
-    public function update(array $data, $conditions): bool
+    public function update(array $data, ?Condition $conditions = null): bool
     {
+        $this->data($data);
+        $this->isSetTableName();
 
-        $query =  Query::update($this->getTable());
+        try {
 
-        return $this->passData($data, $query);
+            $this->getConnection()->beginTransaction();
+
+            foreach ($this->getDataInserted() as $item) {
+
+                $query = Query::update($this->getTable());
+
+                if ($conditions instanceof Condition) {
+                    $query->whereConditions($conditions);
+                }
+
+                $query->data($item);
+
+                $query->insertValuesModeSafe();
+
+                $this->query((string) $query);
+
+                $this->run($query->getParams());
+            }
+
+            return $this->getConnection()->commit();
+        } catch (\Throwable $e) {
+
+            if ($this->getConnection()->inTransaction()) {
+                $this->getConnection()->rollBack();
+            }
+
+            throw new DatabaseException($e->getMessage());
+        }
     }
 
-    /**
-     * Fetch and optimize data using custom rules.
-     *
-     * @param callable $rules A callback function to define data optimization rules.
-     * @return array|null The optimized data based on the provided rules.
-     */
-    public function fetchPretty(callable $rules): ?array
+    public function delete($conditions, ?array $params = null): bool
     {
-        $data = $this->fetch();
-        if (is_array($data)) {
-            return (new DataOptimizer($data))->optimize($rules);
+        $this->isSetTableName();
+
+        $query = Query::delete($this->getTable());
+        if ($conditions instanceof Condition) {
+            $query->whereConditions($conditions);
         }
-        return null;
+
+        return $this->query((string) $query)->run($params);
     }
 }

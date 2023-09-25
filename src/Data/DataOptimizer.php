@@ -109,6 +109,18 @@ class DataOptimizer
             $value = (string) $value;
         }
 
+        if ($rule === 'bool') {
+            $value = (bool) $value;
+        }
+
+        if ($rule === 'array') {
+            $value = (array) $value;
+        }
+
+        if ($rule === 'object') {
+            $value = (object) $value;
+        }
+
         if ($rule === 'slug') {
             $value = $this->textToSlug($value, $this->data_rule->getAttribute('slug'));
         }

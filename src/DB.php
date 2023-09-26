@@ -524,6 +524,11 @@ class DB
             if ($info) {
 
                 if (gettype($value) !== $info['type']) {
+
+                    if(is_array($value) || is_object($value)){
+                        $value = str_replace([':','{','}'],["=>",'[',']'],json_encode($value));
+                    }
+
                     throw new DataValidatorException("Error Processing Data, type given for key '$col' not respect datatype column in database table, type must be an {$info['type']} at '$value (" . gettype($value) . ")'", 1);
                 }
 

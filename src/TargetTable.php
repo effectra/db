@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Effectra\Database;
 
+use Effectra\SqlQuery\Query;
+
 /**
  * Trait for working with database table information.
  */
@@ -16,7 +18,7 @@ trait TargetTable
      */
     public function describeTable(): array
     {
-        $query = "DESCRIBE {$this->getTable()}";
+        $query = Query::info()->listColumns($this->getTable());
         return $this->query((string) $query)->fetch();
     }
 

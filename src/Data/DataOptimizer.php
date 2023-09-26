@@ -17,11 +17,6 @@ class DataOptimizer
     private $data;
 
     /**
-     * @var array $errors The error messages.
-     */
-    private array $errors = [];
-
-    /**
      * @var DataRules $data_rule The data validation rules.
      */
     private DataRules $data_rule;
@@ -93,8 +88,12 @@ class DataOptimizer
     public function applyRule(string $rule, string $key, $value)
     {
 
-        if ($rule === 'json' && $this->isJson($value)) {
+        if ($rule === 'json_decode' && $this->isJson($value)) {
             $value = json_decode($value);
+        }
+
+        if ($rule === 'json_encode') {
+            $value = json_encode($value);
         }
 
         if ($rule === 'integer' && is_numeric($value)) {
@@ -137,11 +136,11 @@ class DataOptimizer
         }
 
         if ($rule === 'strip_tags' && is_string($value)) {
-            $value = strip_tags($value,$this->data_rule->getAttribute('allowed_tags'));
+            $value = strip_tags($value, $this->data_rule->getAttribute('allowed_tags'));
         }
 
         if ($rule === 'replace_value') {
-            $value = $this->data_rule->getAttribute('replace_new_value') ;
+            $value = $this->data_rule->getAttribute('replace_new_value');
         }
 
         if ($rule === 'replace_value_by_new') {
@@ -193,8 +192,8 @@ class DataOptimizer
                         $key =  $result->key;
                     }
                     $item = array_merge($item, [$key => $value]);
-                    if(isset($result->remove)){
-                        unset( $item[$result->remove]);
+                    if (isset($result->remove)) {
+                        unset($item[$result->remove]);
                     }
                 }
                 $data[] = $item;

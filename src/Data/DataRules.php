@@ -123,14 +123,25 @@ class DataRules
     }
 
     /**
-     * Set a rule for a key to validate as JSON.
+     * Set a rule for a key to validate as JSON encoded.
      *
      * @param string $key The key to validate as JSON.
      * @return self
      */
-    public function json(string $key): self
+    public function json_encode(string $key): self
     {
-        return $this->setRule($key, 'json');
+        return $this->setRule($key, 'json_encode');
+    }
+
+     /**
+     * Set a rule for a key to validate as JSON decoded.
+     *
+     * @param string $key The key to validate as JSON.
+     * @return self
+     */
+    public function json_decode(string $key): self
+    {
+        return $this->setRule($key, 'json_decode');
     }
 
     /**

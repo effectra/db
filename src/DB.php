@@ -433,6 +433,12 @@ class DB
     {
         $data = $this->fetch();
         if (is_array($data)) {
+            if($rules instanceof DataRules){
+                // $rules = $rules->getRules();
+                $rules = function($rules){
+                    $rules;
+                };
+            }
             return (new DataOptimizer($data))->optimize($rules);
         }
         return null;

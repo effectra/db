@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Effectra\Database;
 
 use Effectra\Database\Data\DataOptimizer;
+use Effectra\Database\Data\DataRules;
 use Effectra\Database\Data\DataValidator;
 use Effectra\Database\Exception\DatabaseException;
 use Effectra\Database\Exception\DataValidatorException;
@@ -425,10 +426,10 @@ class DB
     /**
      * Fetch and optimize data using custom rules.
      *
-     * @param callable $rules A callback function to define data optimization rules.
+     * @param callable|DataRules $rules A callback function to define data optimization rules or instance of DataRules.
      * @return array|null The optimized data based on the provided rules.
      */
-    public function fetchPretty(callable $rules): ?array
+    public function fetchPretty(callable|DataRules $rules): ?array
     {
         $data = $this->fetch();
         if (is_array($data)) {

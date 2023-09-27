@@ -66,6 +66,18 @@ class DataRules
     }
 
     /**
+     * Set an attributes.
+     *
+     * @param  $attribute The attribute name to set.
+     * @return self
+     */
+    public function setAttributes(array $attributes): self
+    {
+        $this->attributes = $attributes;
+        return $this;
+    }
+
+    /**
      * Check if a rule with the specified key exists.
      *
      * @param string $key The key to check.

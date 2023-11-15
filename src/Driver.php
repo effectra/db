@@ -6,6 +6,8 @@ namespace Effectra\Database;
 
 /**
  * Represents the available database driver options.
+ * 
+ * @package Effectra\Database
  */
 class Driver {
 

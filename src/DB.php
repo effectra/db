@@ -4,26 +4,32 @@ declare(strict_types=1);
 
 namespace Effectra\Database;
 
-use Effectra\Database\Data\DataOptimizer;
-use Effectra\Database\Data\DataRules;
-use Effectra\Database\Data\DataValidator;
+use Effectra\Database\Contracts\ConnectionInterface;
+use Effectra\Database\Contracts\DBInterface;
 use Effectra\Database\Exception\DatabaseException;
 use Effectra\Database\Exception\DataValidatorException;
+use Effectra\DataOptimizer\Contracts\DataCollectionInterface;
+use Effectra\DataOptimizer\Contracts\DataRulesInterface;
+use Effectra\DataOptimizer\DataCollection;
+use Effectra\DataOptimizer\DataOptimizer;
+use Effectra\DataOptimizer\DataValidator;
 use Effectra\SqlQuery\Condition;
 use Effectra\SqlQuery\Operations\Insert;
 use Effectra\SqlQuery\Query;
 use PDO;
 use PDOStatement;
+use Psr\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Class DB
  *
  * The DB class provides a convenient interface for interacting with a database using PDO.
+ *
+ * @package Effectra\Database
  */
-class DB
+class DB implements DBInterface
 {
-    use TargetTable;
-
+    private static ?PDO $CONNECTION = null;
     /**
      * @var string $QUERY The SQL query string.
      */
@@ -44,17 +50,39 @@ class DB
      */
     protected string $table;
 
+    protected static EventDispatcherInterface $eventDispatcher;
+
     /**
-     * Constructor for DB.
+     * Create a database connection using the provided connection instance.
      *
-     * @param string $driver The database driver.
-     * @param PDO $connection The PDO database connection.
+     * @param ConnectionInterface $connection The database connection instance.
+     * @return void
      */
-    public function __construct(
-        protected string $driver,
-        protected \PDO $connection,
-    ) {
-        Query::driver($this->driver);
+    public static function createConnection(ConnectionInterface $connection)
+    {
+        static::$CONNECTION = $connection->connect();
+        Query::driver($connection->getDriver());
+    }
+
+    /**
+     * Set the event dispatcher instance for the database operations.
+     *
+     * @param EventDispatcherInterface $eventDispatcher The event dispatcher instance.
+     * @return void
+     */
+    public static function setEventDispatcher(EventDispatcherInterface $eventDispatcher)
+    {
+        static::$eventDispatcher = $eventDispatcher;
+    }
+
+    /**
+     * Get the current event dispatcher instance for the database operations.
+     *
+     * @return EventDispatcherInterface The event dispatcher instance.
+     */
+    public static function getEventDispatcher(): EventDispatcherInterface
+    {
+        return static::$eventDispatcher;
     }
 
     /**
@@ -62,19 +90,9 @@ class DB
      *
      * @return PDO The PDO database connection.
      */
-    private function getConnection(): PDO
+    public static function getConnection(): PDO
     {
-        return $this->connection;
-    }
-
-    /**
-     * Set the PDO database connection.
-     *
-     * @param PDO $connection The PDO database connection.
-     */
-    private function setConnection(PDO $connection): void
-    {
-        $this->connection = $connection;
+        return static::$CONNECTION;
     }
 
     /**
@@ -126,7 +144,7 @@ class DB
      */
     public function statement(): PDOStatement|false
     {
-        return $this->statement;
+        return $this->getStatement();
     }
 
     /**
@@ -170,7 +188,6 @@ class DB
 
     /**
      * Check table name is set.
-     *
      */
     private function isSetTableName()
     {
@@ -187,7 +204,7 @@ class DB
      */
     public function table(string $table): self
     {
-        $this->table = $table;
+        $this->setTable($table);
         return $this;
     }
 
@@ -267,9 +284,9 @@ class DB
     /**
      * Get extended error information.
      *
-     * @return array Returns an array of error information.
+     * @return array{0:string, 1:int, 2:string} Returns an array of error information.
      */
-    public function errorInfo(): array
+    public function errorInfo()
     {
         return $this->getConnection()->errorInfo();
     }
@@ -329,6 +346,7 @@ class DB
      */
     public function run(?array $params = null): bool
     {
+
         try {
             $stmt = $this->getConnection()->prepare(static::$QUERY);
             $this->setStatement($stmt);
@@ -393,9 +411,9 @@ class DB
     /**
      * Fetch all rows from the executed query as an associative array.
      *
-     * @return array|null An array of fetched data or null if no data is available.
+     * @return ?array An array of fetched data or null if no data is available.
      */
-    public function fetch(): array|null
+    public function fetch(): ?array
     {
         $this->run();
         if ($this->hasStatement()) {
@@ -412,7 +430,7 @@ class DB
      *
      * @return array|null An array of fetched data as objects or null if no data is available.
      */
-    public function fetchObject(): array|null
+    public function fetchAsObject(): array|null
     {
         $this->run();
         if ($this->hasStatement()) {
@@ -426,20 +444,31 @@ class DB
     /**
      * Fetch and optimize data using custom rules.
      *
-     * @param callable|DataRules $rules A callback function to define data optimization rules or instance of DataRules.
+     * @param callable|DataRulesInterface $rules A callback function to define data optimization rules or instance of DataRulesInterface.
      * @return array|null The optimized data based on the provided rules.
      */
-    public function fetchPretty(callable|DataRules $rules): ?array
+    public function fetchPretty(callable|DataRulesInterface $rules): ?array
     {
         $data = $this->fetch();
         if (is_array($data)) {
-            if($rules instanceof DataRules){
-                // $rules = $rules->getRules();
-                $rules = function($rules){
+            if ($rules instanceof DataRulesInterface) {
+                $rules = function ($rules) {
                     $rules;
                 };
             }
             return (new DataOptimizer($data))->optimize($rules);
+        }
+        return null;
+    }
+
+    public function fetchAsCollection(): ?DataCollectionInterface
+    {
+        $this->run();
+        if ($this->hasStatement()) {
+            $this->getStatement()->setFetchMode(PDO::FETCH_ASSOC);
+            $data = $this->getStatement()->fetchAll();
+            $this->setStatement(false);
+            return new DataCollection($data);
         }
         return null;
     }
@@ -468,24 +497,21 @@ class DB
      * Validate and set data to be inserted into the database.
      *
      * @param mixed $data The data to be inserted.
-     *
+     * @return self The DB instance with the specified table.
      * @throws DataValidatorException If the data is not valid.
      */
-    public function data($data)
+    public function data($data): self
     {
         $validate = new DataValidator($data);
 
         if ($validate->isAssoc()) {
             $this->setDataInserted([$data]);
-            return;
-        }
-
-        if ($validate->isArrayOfAssoc()) {
+        } else if ($validate->isArrayOfAssoc()) {
             $this->setDataInserted($data);
-            return;
         }
 
         $validate->validate();
+        return $this;
     }
 
     /**
@@ -502,100 +528,28 @@ class DB
     }
 
     /**
-     * Validate the payload against table columns and apply data transformation rules.
-     *
-     * @param array $payload The payload data to validate.
-     * @param array $tableInfo The information about the database table columns.
-     *
-     * @return array The validated and transformed payload data.
-     *
-     * @throws DataValidatorException If the payload is not valid.
-     */
-    public function validatePayload(array $payload, array $tableInfo): array
-    {
-        $requiredColumns = $this->requiredColumns($tableInfo);
-        $payloadKeys = array_keys($payload);
-
-        $missingColumns = array_diff($requiredColumns, $payloadKeys);
-
-        if (!empty($missingColumns)) {
-            $diff = join(",", $missingColumns);
-            throw new DataValidatorException("Error Processing Data, required columns not found: '$diff'", 1);
-        }
-
-        foreach ($payload as $col => $value) {
-
-
-            $info = $this->getColumnInfo($col, $tableInfo);
-
-            if ($info) {
-
-                if (gettype($value) !== $info['type']) {
-
-                    if(is_array($value) || is_object($value)){
-                        $value = str_replace([':','{','}'],["=>",'[',']'],json_encode($value));
-                    }
-
-                    throw new DataValidatorException("Error Processing Data, type given for key '$col' not respect datatype column in database table, type must be an {$info['type']} at '$value (" . gettype($value) . ")'", 1);
-                }
-
-                if (empty($value) && $info['default'] === null && $info['null'] === 'NO') {
-                    throw new DataValidatorException("key $col must has a non-empty value");
-                }
-            }
-
-            $payload[$col] = $value;
-
-            if (in_array($col, array_diff($payloadKeys, $requiredColumns))) {
-                unset($payload[$col]);
-            }
-        }
-
-        return $payload;
-    }
-
-    /**
      * Insert data into the database table.
      *
-     * @param array|object $data The data to be inserted.
      * @return bool True if the data was successfully inserted, false otherwise.
-     * @throws DatabaseException If there's an error during data insertion.
      */
-    public function insert($data): bool
+    public function insert(): bool
     {
-        $this->data($data);
         $this->isSetTableName();
 
-        try {
+        foreach ($this->getDataInserted() as $item) {
 
-            $this->getConnection()->beginTransaction();
+            $query =  Query::insert($this->getTable(), Insert::INSERT_DATA);
 
-            $tableInfo = $this->getTableInfo();
+            $query->data($item);
 
-            foreach ($this->getDataInserted() as $item) {
+            $query->insertValuesModeSafe();
 
-                $validateItem = $this->validatePayload($item, $tableInfo);
+            $this->query((string) $query);
 
-                $query =  Query::insert($this->getTable(), Insert::INSERT_DATA);
-
-                $query->data($validateItem);
-
-                $query->insertValuesModeSafe();
-
-                $this->query((string) $query);
-
-                $this->run($query->getParams());
-            }
-
-            return $this->getConnection()->commit();
-        } catch (\Throwable $e) {
-
-            if ($this->getConnection()->inTransaction()) {
-                $this->getConnection()->rollBack();
-            }
-
-            throw new DatabaseException($e->getMessage());
+            $this->run($query->getParams());
         }
+
+        return true;
     }
 
     /**
@@ -605,52 +559,66 @@ class DB
      * @param ?Condition $conditions The conditions that determine which rows to update.
      * @return bool True if the data was successfully updated, false otherwise.
      */
-    public function update(array $data, ?Condition $conditions = null): bool
+    public function update(?Condition $conditions = null): bool
     {
-        $this->data($data);
+        $success = true;
         $this->isSetTableName();
 
-        try {
+        foreach ($this->getDataInserted() as $item) {
 
-            $this->getConnection()->beginTransaction();
+            $query = Query::update($this->getTable());
 
-            foreach ($this->getDataInserted() as $item) {
-
-                $query = Query::update($this->getTable());
-
-                if ($conditions instanceof Condition) {
-                    $query->whereConditions($conditions);
-                }
-
-                $query->data($item);
-
-                $query->insertValuesModeSafe();
-
-                $this->query((string) $query);
-
-                $this->run($query->getParams());
+            if ($conditions instanceof Condition) {
+                $query->whereConditions($conditions);
             }
 
-            return $this->getConnection()->commit();
-        } catch (\Throwable $e) {
+            $query->data($item);
 
-            if ($this->getConnection()->inTransaction()) {
-                $this->getConnection()->rollBack();
+            $query->insertValuesModeSafe();
+
+            $this->query((string) $query);
+
+            $success = $this->run($query->getParams());
+        }
+
+        return $success;
+    }
+
+    /**
+     * Delete a rox from the database by its primary key.
+     *
+     * @param string|int $id
+     * @param string $keyName 
+     * @return bool
+     */
+    public function deleteById(string|int $id, string $keyName = 'id'): bool
+    {
+        $query = Query::delete($this->getTable());
+        $query->whereConditions((new Condition())->where([$keyName => ':' . $keyName]));
+
+        return $this->query((string) $query)->run([$keyName => $id]);
+    }
+
+    /**
+     * Perform a model operation in a transaction.
+     *
+     * @param callable $callback
+     * @param array ...$args
+     * @return mixed
+     */
+    public function transaction(callable $callback, array ...$args)
+    {
+
+        try {
+            $this->beginTransaction();
+            return call_user_func($callback, ...$args);
+        } catch (\PDOException $e) {
+
+            if ($this->inTransaction()) {
+                $this->rollBack();
             }
 
             throw new DatabaseException($e->getMessage());
         }
-    }
-
-    public function delete($conditions, ?array $params = null): bool
-    {
-        $this->isSetTableName();
-
-        $query = Query::delete($this->getTable());
-        if ($conditions instanceof Condition) {
-            $query->whereConditions($conditions);
-        }
-
-        return $this->query((string) $query)->run($params);
     }
 }

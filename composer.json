@@ -14,9 +14,17 @@
             "email": "info@mohammedtaha.net"
         }
     ],
-    
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
     "require": {
-        "effectra/sql-query":"^2.0"
+        "effectra/event-dispatcher": "^1.0",
+        "bmt/noun-converter": "^1.0",
+        "effectra/sql-query": "^2.0",
+        "effectra/data-optimizer": "^1.0",
+        "symfony/var-dumper": "^6.0"
     },
     "minimum-stability": "stable"
 }

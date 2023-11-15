@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Effectra\Database;
 
+use Effectra\Database\Contracts\ConnectionInterface;
 use Effectra\Database\Contracts\DriverInterface;
-use Effectra\Database\DatabaseType\MySql;
-use Effectra\Database\DatabaseType\PostgreSQL;
-use Effectra\Database\DatabaseType\Sqlite;
+use Effectra\Database\Drivers\MySql;
+use Effectra\Database\Drivers\PostgreSQL;
+use Effectra\Database\Drivers\Sqlite;
 use Effectra\Database\Exception\DatabaseDriverException;
 use Effectra\Database\Exception\DatabaseException;
 use PDO;
@@ -17,15 +18,56 @@ use PDOException;
  * Class Connection
  *
  * Represents a database connection manager.
+ * 
+ * @package Effectra\Database
  */
-class Connection
+class Connection implements ConnectionInterface
 {
+    /**
+     * The name of the database driver.
+     *
+     * @var string
+     */
+    private $driver;
 
-    public function __construct(
-        protected string $driver,
-        protected array $config
-    ) {
+     /**
+     * The configuration array containing connection details.
+     *
+     * @var array
+     */
+    private $config;
+
+    /**
+     * Connection constructor.
+     *
+     * @param array $config The configuration array containing connection details.
+     */
+    public function __construct(array $config)
+    {
+        $this->config = $config;
+        $this->driver = $config['driver'];
     }
+
+    /**
+     * Get the current database driver.
+     *
+     * @return string The name of the database driver.
+     */
+    public function getDriver(): string
+    {
+        return $this->driver;
+    }
+
+    /**
+     * Set the database driver.
+     *
+     * @param string $driver The name of the database driver.
+     */
+    public function setDriver(string $driver): void
+    {
+        $this->driver = $driver;
+    }
+
     /**
      * Establishes a database connection based on the configuration.
      *
@@ -36,7 +78,7 @@ class Connection
     {
         $driver = $this->getDatabaseDriver();
         if (!$driver instanceof DriverInterface) {
-            throw new DatabaseDriverException("Error Processing Driver");
+            throw new DatabaseDriverException("Error Processing Driver, driver must be instance of  Effectra\Database\Exception\DatabaseDriverException");
         }
 
         try {
@@ -54,10 +96,11 @@ class Connection
      */
     public function getDatabaseDriver(): DriverInterface
     {
-        return match($this->driver){
-            'mysql'=> new MySql(),
+        return match ($this->driver) {
+            'mysql' => new MySql(),
             'sqlite' => new Sqlite(),
-            'postgresql' =>new PostgreSQL()
+            'postgresql' => new PostgreSQL(),
+            default => throw new DatabaseDriverException("Unsupported database driver: {$this->driver}"),
         };
     }
 }

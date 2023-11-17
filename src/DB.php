@@ -444,23 +444,23 @@ class DB implements DBInterface
     /**
      * Fetch and optimize data using custom rules.
      *
-     * @param callable|DataRulesInterface $rules A callback function to define data optimization rules or instance of DataRulesInterface.
+     * @param DataRulesInterface $rules define data optimization rules .
      * @return array|null The optimized data based on the provided rules.
      */
-    public function fetchPretty(callable|DataRulesInterface $rules): ?array
+    public function fetchPretty(DataRulesInterface $rules): ?array
     {
         $data = $this->fetch();
         if (is_array($data)) {
-            if ($rules instanceof DataRulesInterface) {
-                $rules = function ($rules) {
-                    $rules;
-                };
-            }
             return (new DataOptimizer($data))->optimize($rules);
         }
         return null;
     }
 
+     /**
+     * Fetch all rows from the executed query as an DataCollectionInterface.
+     *
+     * @return ?array An array of fetched data or null if no data is available.
+     */
     public function fetchAsCollection(): ?DataCollectionInterface
     {
         $this->run();

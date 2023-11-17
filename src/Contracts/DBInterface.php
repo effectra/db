@@ -217,16 +217,19 @@ interface DBInterface
          */
         public function fetchAsObject(): array|null;
 
-
         /**
          * Fetch and optimize data using custom rules.
          *
-         * @param callable|DataRulesInterface $rules A callback function to define data optimization rules or instance of DataRulesInterface.;
+         * @param DataRulesInterface $rules define data optimization rules .
          * @return array|null The optimized data based on the provided rules.
          */
-        public function fetchPretty(callable|DataRulesInterface $rules): ?array;
+        public function fetchPretty(DataRulesInterface $rules): ?array;
 
-
+        /**
+         * Fetch all rows from the executed query as an DataCollectionInterface.
+         *
+         * @return ?array An array of fetched data or null if no data is available.
+         */
         public function fetchAsCollection(): ?DataCollectionInterface;
 
         /**

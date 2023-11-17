@@ -383,7 +383,8 @@ class Model
      */
     private function makeTableName(): string
     {
-        return strtolower((new NounConverter())->convertToPlural(Utils::camelToUnderscore(get_class($this))));
+        $name = (new \ReflectionClass($this))->getShortName();
+        return  strtolower((new NounConverter())->convertToPlural(Utils::camelToUnderscore($name)));
     }
 
     /**
@@ -675,6 +676,7 @@ class Model
             throw new \InvalidArgumentException("Data array is empty.");
         }
 
+
         $success = true;
         $v = (new DataValidator($data));
 
@@ -817,6 +819,7 @@ class Model
      */
     public static function get(array|string $columns = '*', ?callable $toQuery = null, ?DataRulesInterface $rules = null,  ?self $model = null): ?DataCollectionInterface
     {
+
         $model = $model ?? static::newInstance();
 
         $query = Query::select($model->getTable());

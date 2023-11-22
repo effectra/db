@@ -28,7 +28,6 @@ use Symfony\Component\VarDumper\VarDumper;
 class Model
 {
     use ModelEventTrait;
-
     /**
      * @var DBInterface The database connection instance.
      */
@@ -345,6 +344,9 @@ class Model
         }
         $type = $this->getSchema($property)->getDataType();
         if (gettype($value) === $type) {
+            // if (! $this->validateDateTime($value)) {
+            //     throw new \InvalidArgumentException("invalid datetime format for argument '$property'");
+            // }
             $this->entries[$property] = $value;
             if ($this->hasOption('called_get')) {
                 $this->addToOption('updated_values', $property, $value);
@@ -704,12 +706,7 @@ class Model
      */
     public function save(): bool
     {
-        $this->createModelStructure();
         $this->createTimestamp();
-
-        if ($this->getEntry('id') == Schema::DEFAULT_VALUE_UNSET) {
-            $this->removeEntry('id');
-        }
 
         $query =  Query::insert($this->getTable(), Insert::INSERT_DATA);
 
@@ -719,14 +716,15 @@ class Model
 
         static::setQuery($query);
 
-        if ($this->event('saving') === false) {
+        if ($this->event('saving', $this) === false) {
             return false;
         }
+        $db = $this->getDatabaseConnection();
+        $result =  $db->query((string) $query)->run($query->getParams());
 
-        $result =  $this->getDatabaseConnection()->query((string) $query)->run($query->getParams());
-
-        if ($result) {
-            $this->event('saved');
+        if ($result === true) {
+            $this->setEntry($this->getKeyName(), (int) $db->lastInsertId());
+            $this->event('saved', $this);
             return true;
         }
 
@@ -761,14 +759,14 @@ class Model
 
         $params =  array_merge($query->getParams(), [$this->getKeyName() => $id]);
 
-        if ($this->event('updating') === false) {
+        if ($this->event('updating', $this) === false) {
             return false;
         }
 
         $result = $this->getDatabaseConnection()->query((string) $query)->run($params);
 
         if ($result) {
-            $this->event('updated');
+            $this->event('updated', $this);
             return true;
         }
 
@@ -778,11 +776,11 @@ class Model
     /**
      * Perform a model operation in a transaction.
      *
-     * @param callable $callback
+     * @param \Closure $callback
      * @param array ...$args
      * @return void
      */
-    public static function transaction(callable $callback, array ...$args)
+    public static function transaction(\Closure $callback, array ...$args)
     {
         return static::getDatabaseConnection()->transaction($callback, $args);
     }
@@ -815,9 +813,9 @@ class Model
      * @param callable|null $toQuery
      * @param DataRulesInterface|null $rules
      * @param self|null $model
-     * @return DataCollectionInterface|null
+     * @return DataCollectionInterface
      */
-    public static function get(array|string $columns = '*', ?callable $toQuery = null, ?DataRulesInterface $rules = null,  ?self $model = null): ?DataCollectionInterface
+    public static function get(array|string $columns = '*', ?callable $toQuery = null, ?DataRulesInterface $rules = null,  ?self $model = null): DataCollectionInterface
     {
 
         $model = $model ?? static::newInstance();
@@ -839,17 +837,9 @@ class Model
 
         $statement = $model->getDatabaseConnection()->query((string) $query);
 
-        if ($rules) {
-            $data = $statement->fetchPretty($rules);
-        } else {
-            $data = $statement->fetch();
-        }
+        $data = $rules ? $statement->fetchPretty($rules) : $statement->fetch();
 
-        if (!$data) {
-            return null;
-        }
-
-        return (new DataCollection($data))
+        return (new DataCollection($data ?? []))
             ->map(
                 fn ($item) => static::newInstance()
                     ->setOption('called_get', [])
@@ -862,9 +852,9 @@ class Model
      *
      * @param array|string $columns
      * @param DataRulesInterface|null $rules
-     * @return DataCollectionInterface|null
+     * @return DataCollectionInterface
      */
-    public static function all(array|string $columns = '*', ?DataRulesInterface $rules = null): ?DataCollectionInterface
+    public static function all(array|string $columns = '*', ?DataRulesInterface $rules = null): DataCollectionInterface
     {
         return static::get($columns, null, $rules);
     }
@@ -876,9 +866,9 @@ class Model
      * @param int|null $count_until
      * @param array|string $columns
      * @param DataRulesInterface|null $rules
-     * @return DataCollectionInterface|null
+     * @return DataCollectionInterface
      */
-    public static function limit(int $start_from, ?int $count_until = null, array|string $columns = '*', ?DataRulesInterface $rules = null): ?DataCollectionInterface
+    public static function limit(int $start_from, ?int $count_until = null, array|string $columns = '*', ?DataRulesInterface $rules = null): DataCollectionInterface
     {
         return static::get($columns, fn (Select $q) => $q->limit($start_from, $count_until), $rules);
     }
@@ -907,9 +897,9 @@ class Model
      * @param mixed $value
      * @param array|string $columns
      * @param DataRulesInterface|null $rules
-     * @return DataCollectionInterface|null
+     * @return DataCollectionInterface
      */
-    public static function findBy(string $term, $value, array|string $columns = '*', ?DataRulesInterface $rules = null): ?DataCollectionInterface
+    public static function findBy(string $term, $value, array|string $columns = '*', ?DataRulesInterface $rules = null): DataCollectionInterface
     {
         return static::get($columns, fn ($query) => $query->where([$term => $value]), $rules);
     }
@@ -920,9 +910,9 @@ class Model
      * @param array $terms
      * @param array|string $columns
      * @param DataRulesInterface|null $rules
-     * @return DataCollectionInterface|null
+     * @return DataCollectionInterface
      */
-    public static function search(array $terms, array|string $columns = '*', ?DataRulesInterface $rules = null): ?DataCollectionInterface
+    public static function search(array $terms, array|string $columns = '*', ?DataRulesInterface $rules = null): DataCollectionInterface
     {
         if (empty($terms)) {
             throw new \InvalidArgumentException('Invalid terms.');
@@ -936,9 +926,9 @@ class Model
      * @param Condition $conditions
      * @param array|string $columns
      * @param DataRulesInterface|null $rules
-     * @return DataCollectionInterface|null
+     * @return DataCollectionInterface
      */
-    public static function where(Condition $conditions, array|string $columns = '*', ?DataRulesInterface $rules = null): ?DataCollectionInterface
+    public static function where(Condition $conditions, array|string $columns = '*', ?DataRulesInterface $rules = null): DataCollectionInterface
     {
         return static::get($columns, fn (Select $q) => $q->whereConditions($conditions), $rules);
     }
@@ -951,9 +941,9 @@ class Model
      * @param mixed $to
      * @param array|string $columns
      * @param DataRulesInterface|null $rules
-     * @return DataCollectionInterface|null
+     * @return DataCollectionInterface
      */
-    public static function between(string $targetColumn, string|int|float $from, string|int|float $to, array|string $columns = '*', ?DataRulesInterface $rules = null): ?DataCollectionInterface
+    public static function between(string $targetColumn, string|int|float $from, string|int|float $to, array|string $columns = '*', ?DataRulesInterface $rules = null): DataCollectionInterface
     {
         return static::get($columns, fn (Select $q) => $q->whereInBetween($targetColumn, $from, $to), $rules);
     }
@@ -964,13 +954,13 @@ class Model
      * @param Condition $conditions
      * @param array|null $params
      * @param self|null $model
-     * @return bool
+     * @return bool return true if success, false 
      */
     public static function delete(Condition $conditions, ?array $params = null, ?self $model = null): bool
     {
         $model = $model ?? static::newInstance();
 
-        if ($model->event('deleting') === false) {
+        if ($model->event('deleting', $model) === false) {
             return false;
         }
 
@@ -982,7 +972,7 @@ class Model
         $result = $model->getDatabaseConnection()->query((string) $query)->run($params);
 
         if ($result) {
-            $model->event('deleted');
+            $model->event('deleted', $model);
         }
         return $result;
     }
@@ -996,6 +986,7 @@ class Model
     public static function deleteById(string|int $id): bool
     {
         $model = static::newInstance();
+
         if (!$model->validateId($id)) {
             throw new \InvalidArgumentException("Error Processing ID($id),ID must be type {$model->getKeyType()}");
         }
@@ -1024,6 +1015,20 @@ class Model
     }
 
     /**
+     * Delete models from the database based on its id.
+     * @return bool
+     */
+    public function deleteModel(): bool
+    {
+        if (!$this->hasEntry($this->getKeyName())) {
+            throw new \Exception("Error Processing Delete, {$this->getKeyName()} not defined");
+        }
+        $id = $this->getEntry($this->getKeyName());
+
+        return static::deleteById($id);
+    }
+
+    /**
      * Delete models from the database by their primary keys in a transaction.
      *
      * @param array $ids
@@ -1048,17 +1053,6 @@ class Model
         static::setQuery($query);
 
         return $model->getDatabaseConnection()->query((string) $query)->run();
-    }
-
-    /**
-     * Get the last inserted ID for the model.
-     *
-     * @return int
-     */
-    public static function lastInsertId(): int
-    {
-        $model = static::newInstance();
-        return (int) $model->getDatabaseConnection()->lastInsertId();
     }
 
     /**

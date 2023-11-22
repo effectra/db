@@ -101,10 +101,11 @@ trait ModelEventTrait
      * Trigger an event by name.
      *
      * @param string $name The name of the event.
+     * @param string $model The model of the event.
      *
-     * @return bool True if the event is triggered successfully, false otherwise.
+     * @return mixed True if the event is triggered successfully, false otherwise.
      */
-    public function event(string $name): bool
+    public function event(string $name,$model): mixed
     {
         $event = $this->getEvent($name);
         if ($event instanceof StoppableEventInterface) {
@@ -112,7 +113,7 @@ trait ModelEventTrait
         }
         $method = "on" . ucfirst($name);
         if (method_exists($this, $method)) {
-            return call_user_func([$this, $method], []);
+            return call_user_func([$this, $method], $model);
         }
         return true;
     }

@@ -25,7 +25,7 @@ use Symfony\Component\VarDumper\VarDumper;
  *
  * @package Effectra\Database
  */
-class Model
+class Model implements \JsonSerializable
 {
     use ModelEventTrait;
     /**
@@ -1110,6 +1110,16 @@ class Model
     public static function getQueryUsedAsString(): string
     {
         return (string) static::getQueryUsed();
+    }
+
+    /**
+     * Specify data which should be serialized to JSON.
+     *
+     * @return array Data which can be serialized by json_encode().
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->getEntries();
     }
 
     /**

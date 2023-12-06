@@ -259,10 +259,10 @@ interface DBInterface
          * Optimize data, Validate and set data to be inserted into the database.
          *
          * @param mixed $data The data to be inserted.
-         *
+         * @param DataRulesInterface $rules define rules using DataRulesInterface.
          * @throws DataValidatorException If the data is not valid.
          */
-        public function prettyData($data, callable $rules);
+        public function prettyData($data, DataRulesInterface $rules);
 
         /**
          * Insert data into the database table.

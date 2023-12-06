@@ -887,7 +887,10 @@ class Model implements \JsonSerializable
 
         $data = static::get($columns, fn ($query) => $query->where([$model->getKeyName() => $id]), $rules, $model);
 
-        return $data ? $data->first() : null;
+        if ($data->first() instanceof self) {
+            return $data;
+        }
+        return  null;
     }
 
     /**

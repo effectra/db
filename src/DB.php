@@ -463,14 +463,13 @@ class DB implements DBInterface
      */
     public function fetchAsCollection(): ?DataCollectionInterface
     {
-        $this->run();
-        if ($this->hasStatement()) {
-            $this->getStatement()->setFetchMode(PDO::FETCH_ASSOC);
-            $data = $this->getStatement()->fetchAll();
-            $this->setStatement(false);
-            return new DataCollection($data);
+        $data = $this->fetch();
+
+        if(!is_array($data)){
+            return null;
         }
-        return null;
+        
+        return new DataCollection($data);
     }
 
     /**
@@ -518,10 +517,10 @@ class DB implements DBInterface
      * Optimize data, Validate and set data to be inserted into the database.
      *
      * @param mixed $data The data to be inserted.
-     *
+     * @param DataRulesInterface $rules define rules using DataRulesInterface.
      * @throws DataValidatorException If the data is not valid.
      */
-    public function prettyData($data, callable $rules)
+    public function prettyData($data, DataRulesInterface  $rules)
     {
         $data = (new DataOptimizer($data))->optimize($rules);
         $this->data($data);
